@@ -1,0 +1,141 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+from tqdm import tqdm
+from pathlib import Path
+
+DATA_DIR = "/Users/richard/Desktop/"
+
+itv = 30
+
+renderer_path = "../PanoRenderer/build/main"
+# input_vid_path = DATA_DIR + 'Dataset/v046.mp4'
+input_vid_path = DATA_DIR + "drift.mp4"
+trajs_path = "trajs.npy"
+output_vid_path = "out.mp4"
+
+
+cap = cv2.VideoCapture(input_vid_path)
+vid_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+vid_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+print("n_frames:", n_frames)
+
+# Create KCF tracker
+tracker = cv2.TrackerKCF_create()
+
+yaw_err = []
+pitch_err = []
+
+stop_at_iter_end = False
+
+for i in tqdm(range(0, n_frames, itv)):
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+    ret, frame = cap.read()
+
+    if not ret:
+        tqdm.write(f"Warning: could not read frame {i}\n")
+        break;
+        #for j in range(i - itv, n_frames):
+        #    cap.set(cv2.CAP_PROP_POS_FRAMES, j)
+        #    ret, frame = cap.read()
+        #stop_at_iter_end = True
+
+    if i == 0:
+        res = 1024
+        frame_small = cv2.resize(frame, (res, res // 2), interpolation=cv2.INTER_AREA)
+        bbox = cv2.selectROI(
+            "Select ROI", frame_small, showCrosshair=True, printNotice=False
+        )
+        cv2.destroyAllWindows()
+        x_cL, y_cL, w, h = (np.array(bbox) * vid_w / res).astype(np.int32)
+        x_cU, y_cU = x_cL + w, y_cL + h
+
+    # Crop frame
+    frame = frame[y_cL:y_cU, x_cL:x_cU]
+
+    if i == 0:
+        track_bbox = cv2.selectROI(
+            "Select Tracking Target", frame, showCrosshair=True, printNotice=False
+        )
+        cv2.destroyAllWindows()
+        tracker.init(frame, track_bbox)
+
+    ret, track_bbox = tracker.update(frame)
+
+    if ret:
+        tx, ty, tw, th = (np.array(track_bbox)).astype(np.int32)
+        cv2.rectangle(frame, (tx, ty), (tx + tw, ty + th), (0, 255, 0), 2)
+        yaw_err.append((i, tx))
+        pitch_err.append((i, ty))
+
+    cv2.imshow("Window", frame)
+    cv2.waitKey(1)
+
+    #if stop_at_iter_end:
+    #    break
+
+
+# Fake some extra keyframes to make sure interpolation works
+avg_yaw_err = np.diff(np.array(yaw_err)[:, 1]).mean()
+for i in range(3):
+    j = yaw_err[-1][0] + itv
+    yaw_err.append((j, yaw_err[-1][1] + avg_yaw_err))
+
+
+yaw_err = np.array(yaw_err).T.astype(np.float32)
+pitch_err = np.array(pitch_err).T.astype(np.float32)
+
+deg_per_px = 360 / vid_w
+
+yaw_err[1] -= yaw_err[1][0]
+yaw_err[1] *= deg_per_px
+
+pitch_err[1] -= pitch_err[1][0]
+pitch_err[1] *= deg_per_px
+
+yaw_error_per_min = yaw_err[1][-1] / ((yaw_err.shape[1] - 1) * itv) * 30 * 60
+pitch_error_per_min = pitch_err[1][-1] / ((pitch_err.shape[1] - 1) * itv) * 30 * 60
+
+# These are the corrections that should be added to the desired pose at each frame
+yaw_corr = np.array([yaw_err[0], yaw_err[1] * -1])
+
+# Interpolate these correction keyframes to be applied at every frame
+yaw_corrections = np.interp(
+    np.arange(0, n_frames),
+    yaw_corr[0],
+    yaw_corr[1],
+)
+
+# Plot yaw error vs frame number (every element of yaw_error is 60 frames)
+plt.scatter(
+    np.arange(0, n_frames * 2, itv)[: yaw_err.shape[1]],
+    yaw_err[1],
+    label="Yaw Error",
+    marker=".",
+)
+plt.scatter(
+    np.arange(0, n_frames * 2, itv)[: pitch_err.shape[1]],
+    pitch_err[1],
+    label="Pitch Error",
+    marker=".",
+)
+
+plt.xlabel("Frame Number")
+plt.ylabel("Error (degrees)")
+plt.legend()
+plt.title(
+    "Yaw/Pitch Error per Minute: {:.2f}, {:.2f}".format(
+        yaw_error_per_min, pitch_error_per_min
+    )
+)
+plt.show()
+
+print('Generated yaw corrections for {} frames'.format(len(yaw_corrections)))
+
+# Save yaw corrections as input video file name + '-yc.npy'
+yc_path = input_vid_path[:-4] + "-yc.npy"
+print('Saving yaw corrections to', yc_path)
+np.save(yc_path, yaw_corrections)
+
