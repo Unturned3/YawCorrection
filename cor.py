@@ -25,8 +25,6 @@ tracker = cv2.TrackerKCF_create()
 yaw_err = []
 pitch_err = []
 
-stop_at_iter_end = False
-
 for i in tqdm(range(0, n_frames, itv)):
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, i)
@@ -72,8 +70,6 @@ for i in tqdm(range(0, n_frames, itv)):
     cv2.imshow("Window", frame)
     cv2.waitKey(1)
 
-    #if stop_at_iter_end:
-    #    break
 
 cv2.destroyAllWindows()
 
