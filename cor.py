@@ -9,10 +9,8 @@ DATA_DIR = "/Users/richard/Desktop/"
 itv = 30
 
 renderer_path = "../PanoRenderer/build/main"
-# input_vid_path = DATA_DIR + 'Dataset/v046.mp4'
-input_vid_path = DATA_DIR + "drift.mp4"
+input_vid_path = DATA_DIR + 'Dataset/v046.mp4'
 trajs_path = "trajs.npy"
-output_vid_path = "out.mp4"
 
 
 cap = cv2.VideoCapture(input_vid_path)
@@ -37,10 +35,6 @@ for i in tqdm(range(0, n_frames, itv)):
     if not ret:
         tqdm.write(f"Warning: could not read frame {i}\n")
         break;
-        #for j in range(i - itv, n_frames):
-        #    cap.set(cv2.CAP_PROP_POS_FRAMES, j)
-        #    ret, frame = cap.read()
-        #stop_at_iter_end = True
 
     if i == 0:
         res = 1024
@@ -69,6 +63,11 @@ for i in tqdm(range(0, n_frames, itv)):
         cv2.rectangle(frame, (tx, ty), (tx + tw, ty + th), (0, 255, 0), 2)
         yaw_err.append((i, tx))
         pitch_err.append((i, ty))
+    else:
+        tqdm.write(f"Error: tracking failure on frame {i}\n")
+        cv2.imshow(f"Frame {i} Tracking Error", frame)
+        cv2.waitKey(0)
+        break
 
     cv2.imshow("Window", frame)
     cv2.waitKey(1)
@@ -76,6 +75,7 @@ for i in tqdm(range(0, n_frames, itv)):
     #if stop_at_iter_end:
     #    break
 
+cv2.destroyAllWindows()
 
 # Fake some extra keyframes to make sure interpolation works
 avg_yaw_err = np.diff(np.array(yaw_err)[:, 1]).mean()
