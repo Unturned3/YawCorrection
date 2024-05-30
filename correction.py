@@ -8,7 +8,7 @@ import os
 
 itv = 30
 
-input_vids_dir = '/Users/richard/Desktop/Raw/'
+input_vids_dir = '/Users/richard/Desktop/NR/'
 input_vid_paths = sorted(glob(os.path.join(input_vids_dir, '*.mp4')))
 
 for vid_n, input_vid_path in enumerate(input_vid_paths, start=1):
@@ -106,13 +106,13 @@ for vid_n, input_vid_path in enumerate(input_vid_paths, start=1):
     )
 
     # Plot yaw error vs frame number (every element of yaw_error is 60 frames)
-    plt.scatter(
+    plt.plot(
         np.arange(0, n_frames * 2, itv)[: yaw_err.shape[1]],
         yaw_err[1],
         label="Yaw Error",
         marker=".",
     )
-    plt.scatter(
+    plt.plot(
         np.arange(0, n_frames * 2, itv)[: pitch_err.shape[1]],
         pitch_err[1],
         label="Pitch Error",
@@ -127,6 +127,7 @@ for vid_n, input_vid_path in enumerate(input_vid_paths, start=1):
             yaw_error_per_min, pitch_error_per_min
         )
     )
+    plt.savefig(input_vid_path[:-4] + "-drift.png")
     plt.show()
 
     print('Generated yaw corrections for {} frames'.format(len(yaw_corrections)))
